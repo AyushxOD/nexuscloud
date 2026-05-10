@@ -729,17 +729,17 @@ export default function Dashboard() {
     }
   };
 
-  // Handle instance click - filter recommendations
+  // Handle instance click - open deep dive with or without utilization data
   const handleInstanceClick = (instance: EC2Instance) => {
     setHighlightedResource(instance.instanceId);
-    // Also open deep dive for utilization
+    // Open deep dive for instance details (with or without utilization data)
     const util = data?.data?.utilizationData?.find(u => u.resourceId === instance.instanceId);
-    if (util) {
-      setSelectedInstance(instance);
-      setSelectedUtilization(util);
-      setDrawerTitle(`Right-Sizing: ${instance.instanceId}`);
-      setDrawerOpen(true);
-    }
+    setSelectedInstance(instance);
+    setSelectedUtilization(util || null);
+    setSelectedService(null);
+    setSelectedZombie(null);
+    setDrawerTitle(`Instance: ${instance.instanceId}`);
+    setDrawerOpen(true);
   };
 
   // Handle service click - open deep dive
