@@ -32,4 +32,5 @@ jobs:
           aws-region: us-east-1
 
       - name: Deploy infrastructure
+        working-directory: ./infra
         run: npx cdk deploy --require-approval never
