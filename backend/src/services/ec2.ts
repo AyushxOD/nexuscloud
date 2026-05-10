@@ -285,6 +285,8 @@ export class EC2Service {
       });
       const response = await client.send(command);
 
+      console.log('EC2: DescribeAddresses response:', JSON.stringify(response.Addresses || []).substring(0, 500));
+
       const zombies: ZombieResource[] = [];
 
       for (const addr of response.Addresses || []) {

@@ -137,6 +137,22 @@ export class NexusStack extends cdk.Stack {
             ],
             resources: ['*'],
           }),
+          new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+              's3:ListAllMyBuckets',
+              's3:ListBuckets',
+            ],
+            resources: ['*'],
+          }),
+          new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+              'dynamodb:ListTables',
+              'dynamodb:DescribeTable',
+            ],
+            resources: ['*'],
+          }),
         ],
       })
     );

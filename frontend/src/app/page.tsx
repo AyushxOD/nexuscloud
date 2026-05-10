@@ -668,6 +668,139 @@ function UtilizationDeepDive({
 // Import Copy icon
 import { Copy } from 'lucide-react';
 
+// Deep Dive Content for EC2 Instance
+function InstanceDeepDive({
+  instance,
+  utilization,
+}: {
+  instance: EC2Instance;
+  utilization?: UtilizationData | null;
+}) {
+  const getRecommendation = () => {
+    if (!utilization) {
+      return 'No utilization data available. CloudWatch may need up to 5 minutes to start collecting metrics for new instances.';
+    }
+    if (utilization.avgValue < 20) {
+      return `This instance has only used ${utilization.avgValue}% CPU on average over 7 days. Consider downsizing to a smaller instance type to save costs.`;
+    }
+    if (utilization.avgValue > 80) {
+      return `This instance has used ${utilization.avgValue}% average CPU over 7 days, peaking at ${utilization.maxValue}%. Consider upsizing for better performance.`;
+    }
+    return 'CPU utilization is within normal range. No action required.';
+  };
+
+  const getCLI = () => {
+    const commands = [
+      `# View instance details`,
+      `aws ec2 describe-instances --instance-ids ${instance.instanceId} \\`,
+      `  --query 'Reservations[].Instances[]' \\`,
+      `  --output table`,
+      ``,
+      `# View CloudWatch metrics (last 7 days)`,
+      `aws cloudwatch get-metric-statistics \\`,
+      `  --namespace AWS/EC2 \\`,
+      `  --metric-name CPUUtilization \\`,
+      `  --Dimensions Name=InstanceId,Value=${instance.instanceId} \\`,
+      `  --StartTime $(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S) \\`,
+      `  --EndTime $(date -u +%Y-%m-%dT%H:%M:%S) \\`,
+      `  --Period 86400 \\`,
+      `  --statistics Average,Maximum \\`,
+      `  --output json`,
+    ];
+    return commands.join('\n');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Instance Details */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Instance ID</div>
+          <div className="text-xs font-mono text-zinc-300">{instance.instanceId}</div>
+        </div>
+        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Instance Type</div>
+          <div className="text-sm text-zinc-300 font-light">{instance.instanceType}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">State</div>
+          <div className="flex items-center gap-2">
+            <StatusDot state={instance.state} />
+            <span className="text-sm text-zinc-300 capitalize">{instance.state}</span>
+          </div>
+        </div>
+        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Region</div>
+          <div className="text-sm text-zinc-300 font-light">{instance.region}</div>
+        </div>
+      </div>
+
+      {/* Name and Tags */}
+      <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+        <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Name</div>
+        <div className="text-sm text-zinc-300 font-light">{instance.name || 'unnamed'}</div>
+      </div>
+
+      {instance.tags && Object.keys(instance.tags).length > 0 && (
+        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Tags</div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(instance.tags).map(([key, value]) => (
+              <span key={key} className="px-2 py-1 bg-white/[0.05] rounded text-xs text-zinc-400">
+                {key}: {value}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CloudWatch Metrics */}
+      {utilization && (
+        <div>
+          <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">CloudWatch Metrics (7-Day)</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+              <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Average CPU</div>
+              <div className="text-2xl font-light text-white">{utilization.avgValue}%</div>
+            </div>
+            <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+              <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Max CPU</div>
+              <div className="text-2xl font-light text-zinc-400">{utilization.maxValue}%</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Recommendation */}
+      <div>
+        <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">AI Recommendation</h3>
+        <div className="p-4 bg-indigo-500/[0.05] border border-indigo-500/20 rounded-lg">
+          <p className="text-sm text-zinc-300 font-light leading-relaxed">{getRecommendation()}</p>
+        </div>
+      </div>
+
+      {/* CLI */}
+      <div>
+        <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">AWS CLI Commands</h3>
+        <div className="relative">
+          <pre className="p-4 bg-black/40 border border-white/10 rounded-lg text-xs font-mono text-zinc-400 overflow-x-auto whitespace-pre-wrap">
+            {getCLI()}
+          </pre>
+          <button
+            onClick={() => navigator.clipboard.writeText(getCLI())}
+            className="absolute top-2 right-2 p-1.5 rounded bg-white/5 hover:bg-white/10 transition-colors"
+          >
+            <Copy className="h-3.5 w-3.5 text-zinc-500" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============================================
 // MAIN DASHBOARD
 // ============================================
@@ -1110,20 +1243,25 @@ export default function Dashboard() {
           onClose={handleCloseDrawer}
           title={drawerTitle}
         >
-          {selectedService && (
+          {selectedInstance && (
+            <InstanceDeepDive
+              instance={selectedInstance}
+              utilization={selectedUtilization}
+            />
+          )}
+          {!selectedInstance && selectedService && (
             <ServiceDeepDive
               service={selectedService}
               utilization={selectedUtilization || undefined}
-              instanceId={selectedInstance?.instanceId}
             />
           )}
-          {selectedUtilization && !selectedService && (
+          {!selectedInstance && !selectedService && selectedUtilization && (
             <UtilizationDeepDive
               utilization={selectedUtilization}
               instance={selectedInstance || undefined}
             />
           )}
-          {selectedZombie && !selectedService && !selectedUtilization && (
+          {!selectedInstance && !selectedService && !selectedUtilization && selectedZombie && (
             <div className="space-y-6">
               <div className="p-4 bg-amber-500/[0.05] border border-amber-500/20 rounded-lg">
                 <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Resource Type</div>

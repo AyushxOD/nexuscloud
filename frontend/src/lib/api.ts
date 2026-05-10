@@ -23,6 +23,10 @@ export async function fetchOptimizationData() {
   try {
     const data = JSON.parse(responseText);
     console.log('[API] Parsed data:', data);
+    console.log('[API] FRONTEND_RECEIVED - topServices:', data?.data?.topServices);
+    console.log('[API] FRONTEND_RECEIVED - zombieResources:', data?.data?.zombieResources);
+    console.log('[API] FRONTEND_RECEIVED - utilizationData:', data?.data?.utilizationData);
+    console.log('[API] FRONTEND_RECEIVED - ec2Instances:', data?.data?.ec2Instances);
     return data;
   } catch (parseError) {
     console.error('[API] JSON parse error:', parseError);

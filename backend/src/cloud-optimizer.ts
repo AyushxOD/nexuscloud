@@ -305,7 +305,17 @@ export const handler = async (
     logger.info('Request completed', {
       success: response.success,
       statusCode,
+      hasTopServices: response.data?.topServices?.length || 0,
+      hasZombieResources: response.data?.zombieResources?.length || 0,
+      hasUtilizationData: response.data?.utilizationData?.length || 0,
     } as Record<string, unknown>);
+
+    // Debug logging
+    if (response.success && response.data) {
+      console.log('API_SENDING - topServices:', JSON.stringify(response.data.topServices).substring(0, 500));
+      console.log('API_SENDING - zombieResources:', JSON.stringify(response.data.zombieResources).substring(0, 500));
+      console.log('API_SENDING - utilizationData:', JSON.stringify(response.data.utilizationData).substring(0, 500));
+    }
 
     return {
       statusCode,
