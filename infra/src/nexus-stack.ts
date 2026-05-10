@@ -124,6 +124,16 @@ export class NexusStack extends cdk.Stack {
               'ec2:DescribeVolumes',
               'ec2:DescribeVpcs',
               'ec2:DescribeRegions',
+              'ec2:DescribeAddresses',
+              'ec2:DescribeSnapshots',
+            ],
+            resources: ['*'],
+          }),
+          new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+              'cloudwatch:GetMetricStatistics',
+              'cloudwatch:ListMetrics',
             ],
             resources: ['*'],
           }),
