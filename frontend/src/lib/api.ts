@@ -1,63 +1,161 @@
+import type { CloudOptimizerResponse, APIError } from './types';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://g3xewrthlc.execute-api.us-east-1.amazonaws.com';
 
-export async function fetchOptimizationData() {
-  console.log('[API] Fetching optimization data from:', `${API_BASE_URL}/optimizer?action=analyze`);
+interface FetchOptions extends RequestInit {
+  timeout?: number;
+}
 
-  const response = await fetch(`${API_BASE_URL}/optimizer?action=analyze`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+class APIClient {
+  private baseURL: string;
+  private timeout: number;
 
-  const responseText = await response.text();
-  console.log('[API] Response status:', response.status);
-  console.log('[API] Response body:', responseText);
-
-  if (!response.ok) {
-    const error = `[API error ${response.status}] ${responseText}`;
-    console.error('[API] Fetch failed:', error);
-    throw new Error(error);
+  constructor(baseURL: string, timeout: number = 30000) {
+    this.baseURL = baseURL;
+    this.timeout = timeout;
   }
 
-  try {
-    const data = JSON.parse(responseText);
-    console.log('[API] Parsed data:', data);
-    console.log('[API] FRONTEND_RECEIVED - topServices:', data?.data?.topServices);
-    console.log('[API] FRONTEND_RECEIVED - zombieResources:', data?.data?.zombieResources);
-    console.log('[API] FRONTEND_RECEIVED - utilizationData:', data?.data?.utilizationData);
-    console.log('[API] FRONTEND_RECEIVED - ec2Instances:', data?.data?.ec2Instances);
-    return data;
-  } catch (parseError) {
-    console.error('[API] JSON parse error:', parseError);
-    throw new Error(`Invalid JSON response: ${responseText}`);
+  private async fetchWithTimeout(
+    url: string,
+    options: FetchOptions = {}
+  ): Promise<Response> {
+    const { timeout = this.timeout, ...fetchOptions } = options;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...fetchOptions,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout');
+      }
+      throw error;
+    }
+  }
+
+  async get<T>(endpoint: string, options?: FetchOptions): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    console.log(`[API] GET ${endpoint}`);
+
+    const response = await this.fetchWithTimeout(url, {
+      ...options,
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+    });
+
+    const responseText = await response.text();
+
+    console.log(`[API] Response ${response.status}:`, responseText.substring(0, 500));
+
+    if (!response.ok) {
+      const error: APIError = {
+        error: `HTTP ${response.status}`,
+        message: responseText,
+        code: response.status.toString(),
+      };
+      throw new Error(JSON.stringify(error));
+    }
+
+    try {
+      const data = JSON.parse(responseText) as T;
+      return data;
+    } catch (parseError) {
+      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+    }
+  }
+
+  async post<T>(endpoint: string, body?: unknown, options?: FetchOptions): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    console.log(`[API] POST ${endpoint}`, body);
+
+    const response = await this.fetchWithTimeout(url, {
+      ...options,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${responseText}`);
+    }
+
+    const responseText = await response.text();
+    return JSON.parse(responseText) as T;
   }
 }
 
+// Singleton instance
+const apiClient = new APIClient(API_BASE_URL, 30000);
+
+// Optimizer API functions
+export async function fetchOptimizationData(): Promise<CloudOptimizerResponse> {
+  return apiClient.get<CloudOptimizerResponse>('/optimizer?action=analyze');
+}
+
+export async function fetchSpending(): Promise<CloudOptimizerResponse> {
+  return apiClient.get<CloudOptimizerResponse>('/optimizer?action=get-spending');
+}
+
+export async function fetchRecommendations(): Promise<CloudOptimizerResponse> {
+  return apiClient.get<CloudOptimizerResponse>('/optimizer?action=get-recommendations');
+}
+
+// Resource API functions
 export async function fetchResourceMetadata() {
-  console.log('[API] Fetching resource metadata from:', `${API_BASE_URL}/resources`);
+  return apiClient.get('/resources');
+}
 
-  const response = await fetch(`${API_BASE_URL}/resources`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+export async function fetchResourceById(id: string) {
+  return apiClient.get(`/resources/${id}`);
+}
+
+export async function createResource(data: Record<string, unknown>) {
+  return apiClient.post('/resources', data);
+}
+
+export async function updateResource(id: string, data: Record<string, unknown>) {
+  return apiClient.post(`/resources/${id}`, data);
+}
+
+export async function deleteResource(id: string) {
+  const response = await fetch(`${API_BASE_URL}/resources/${id}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
   });
+  return response.json();
+}
 
-  const responseText = await response.text();
-  console.log('[API] Response status:', response.status);
-  console.log('[API] Response body:', responseText);
-
-  if (!response.ok) {
-    const error = `[API error ${response.status}] ${responseText}`;
-    console.error('[API] Fetch failed:', error);
-    throw new Error(error);
-  }
-
+// Utility function for API health check
+export async function checkAPIHealth(): Promise<boolean> {
   try {
-    return JSON.parse(responseText);
-  } catch (parseError) {
-    console.error('[API] JSON parse error:', parseError);
-    throw new Error(`Invalid JSON response: ${responseText}`);
+    const response = await fetch(`${API_BASE_URL}/`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.ok;
+  } catch {
+    return false;
   }
 }
+
+// Export API client for custom requests
+export { apiClient as defaultAPIClient };
+
+// Type exports
+export type { APIError, FetchOptions };

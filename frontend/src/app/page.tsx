@@ -34,7 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { fetchOptimizationData } from '@/lib/api';
 import type { CloudOptimizerResponse, EC2Instance, Resource, ServiceCost, ZombieResource, UtilizationData, ServiceDetail } from '@/lib/types';
 
-const fetcher = () => fetchOptimizationData().then((res) => res as Promise<CloudOptimizerResponse>);
+const fetcher = () => fetchOptimizationData();
 
 interface FilterState {
   states: string[];
