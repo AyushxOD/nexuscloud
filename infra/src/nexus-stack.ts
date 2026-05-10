@@ -153,6 +153,14 @@ export class NexusStack extends cdk.Stack {
             ],
             resources: ['*'],
           }),
+          new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+              'rds:DescribeDBInstances',
+              'rds:ListDBInstances',
+            ],
+            resources: ['*'],
+          }),
         ],
       })
     );

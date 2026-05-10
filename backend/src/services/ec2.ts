@@ -278,37 +278,44 @@ export class EC2Service {
     const client = this.getClientForRegion(targetRegion);
 
     try {
-      logger.info('Fetching unattached Elastic IPs', { region: targetRegion } as Record<string, unknown>);
+      logger.info('Fetching all Elastic IPs', { region: targetRegion } as Record<string, unknown>);
 
-      const command = new DescribeAddressesCommand({
-        Filters: [{ Name: 'association', Values: ['false'] }],
-      });
+      // Get ALL addresses (not just filter) to debug
+      const command = new DescribeAddressesCommand({});
       const response = await client.send(command);
 
-      console.log('EC2: DescribeAddresses response:', JSON.stringify(response.Addresses || []).substring(0, 500));
+      console.log('EC2: DescribeAddresses ALL response:', JSON.stringify(response.Addresses || []).substring(0, 1000));
 
       const zombies: ZombieResource[] = [];
 
       for (const addr of response.Addresses || []) {
         if (!addr.AllocationId) continue;
 
-        // EIPs cost ~$0.005/hour when not attached
-        const monthlyCost = 0.005 * 24 * 30;
+        // Check if NOT associated - if AssociationId is null/undefined, it's unattached
+        const isUnattached = !addr.AssociationId;
 
-        zombies.push({
-          resourceId: addr.AllocationId,
-          resourceType: 'eip',
-          description: `Unattached Elastic IP (${addr.PublicIp || 'no public IP'}) - $${monthlyCost.toFixed(2)}/month waste`,
-          estimatedSavings: Math.round(monthlyCost * 100) / 100,
-          region: targetRegion,
-          createdAt: addr.AllocationId ? new Date().toISOString() : new Date().toISOString(),
-        });
+        console.log('EC2: Checking EIP:', addr.AllocationId, 'AssociationId:', addr.AssociationId);
+
+        if (isUnattached) {
+          // EIPs cost ~$0.005/hour when not attached
+          const monthlyCost = 0.005 * 24 * 30;
+
+          zombies.push({
+            resourceId: addr.AllocationId,
+            resourceType: 'eip',
+            description: `Unattached Elastic IP (${addr.PublicIp || 'no public IP'}) - $${monthlyCost.toFixed(2)}/month waste`,
+            estimatedSavings: Math.round(monthlyCost * 100) / 100,
+            region: targetRegion,
+            createdAt: addr.AllocationId ? new Date().toISOString() : new Date().toISOString(),
+          });
+        }
       }
 
-      logger.info('Unattached EIPs fetched', { count: zombies.length } as Record<string, unknown>);
+      logger.info('Unattached EIPs fetched', { count: zombies.length, totalAddresses: response.Addresses?.length } as Record<string, unknown>);
       return zombies;
     } catch (error) {
       logger.error('Failed to fetch EIPs', error);
+      console.log('EC2: ERROR fetching EIPs:', error);
       return [];
     }
   }

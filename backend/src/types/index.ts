@@ -62,6 +62,7 @@ export interface OptimizationReport {
   topServices: ServiceCost[];
   zombieResources: ZombieResource[];
   utilizationData: UtilizationData[];
+  serviceDetails: ServiceDetail[];
   timestamp: string;
 }
 
@@ -120,4 +121,17 @@ export interface DeepDiveRecommendation {
   action: 'upgrade' | 'downgrade' | 'terminate' | 'resize';
   cliCommand: string;
   estimatedSavings?: number;
+}
+
+export interface ServiceResource {
+  name: string;
+  createdAt?: string;
+  region?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ServiceDetail {
+  serviceName: string;
+  resources: ServiceResource[];
+  cost: number;
 }

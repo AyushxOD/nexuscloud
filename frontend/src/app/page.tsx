@@ -30,7 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchOptimizationData } from '@/lib/api';
-import type { CloudOptimizerResponse, EC2Instance, Resource, ServiceCost, ZombieResource, UtilizationData } from '@/lib/types';
+import type { CloudOptimizerResponse, EC2Instance, Resource, ServiceCost, ZombieResource, UtilizationData, ServiceDetail } from '@/lib/types';
 
 const fetcher = () => fetchOptimizationData().then((res) => res as Promise<CloudOptimizerResponse>);
 
@@ -521,28 +521,45 @@ function DeepDiveDrawer({
 // Deep Dive Content for Services
 function ServiceDeepDive({
   service,
-  utilization,
-  instanceId,
+  serviceResources,
 }: {
   service?: ServiceCost;
-  utilization?: UtilizationData;
-  instanceId?: string;
+  serviceResources?: { serviceName: string; resources: { name: string; createdAt?: string; details?: Record<string, unknown> }[]; cost: number }[];
 }) {
   if (!service) return null;
+
+  // Find matching resources for this service
+  const matchingResources = serviceResources?.find(sr => {
+    const srLower = sr.serviceName.toLowerCase();
+    const serviceLower = service.serviceName.toLowerCase();
+    return srLower.includes('s3') && serviceLower.includes('s3') ||
+           srLower.includes('dynamodb') && serviceLower.includes('dynamodb') ||
+           srLower.includes('rds') && (serviceLower.includes('rds') || serviceLower.includes('database')) ||
+           srLower.includes('ec2') && (serviceLower.includes('ec2') || serviceLower.includes('compute'));
+  });
 
   // Generate CLI command based on service type
   const getServiceCLI = () => {
     const serviceName = service.serviceName.toLowerCase();
-    if (serviceName.includes('ec2') || serviceName.includes('compute')) {
-      return `aws ec2 describe-instances --region us-east-1 --filters "Name=instance-state-code,Values=16" | jq '.Reservations[].Instances[] | select(.Tags.Name=="${service.serviceName}")'`;
+    if (serviceName.includes('s3') || serviceName.includes('storage')) {
+      return `aws s3 ls\naws s3api list-buckets --query 'Buckets[].Name'`;
     }
-    if (serviceName.includes('rds')) {
-      return `aws rds describe-db-instances --region us-east-1 | jq '.DBInstances[] | select(.DBInstanceIdentifier | contains("${service.serviceName}"))'`;
+    if (serviceName.includes('dynamodb')) {
+      return `aws dynamodb list-tables --region us-east-1\naws dynamodb describe-table --table-name <table-name>`;
+    }
+    if (serviceName.includes('rds') || serviceName.includes('database')) {
+      return `aws rds describe-db-instances --region us-east-1\naws rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier'`;
+    }
+    if (serviceName.includes('ec2') || serviceName.includes('compute')) {
+      return `aws ec2 describe-vpcs --region us-east-1\naws ec2 describe-instances --filters "Name=instance-state-name,Values=running"`;
     }
     return `# View ${service.serviceName} cost details\naws ce get-cost-and-usage --time-period Start=${service.period.start},End=${service.period.end} --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE`;
   };
 
   const getRecommendation = () => {
+    if (service.cost === 0) {
+      return `This service shows $0 cost. This could mean: (1) Within free tier, (2) Cost Explorer has 24hr sync delay, or (3) No active usage.`;
+    }
     const savings = service.cost * 0.15;
     return `Optimize ${service.serviceName} by identifying idle resources. Potential monthly savings: $${savings.toFixed(2)}`;
   };
@@ -553,12 +570,41 @@ function ServiceDeepDive({
       <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs text-zinc-500 uppercase tracking-wider">Current Cost</span>
-          <span className="text-2xl font-light text-white">${service.cost.toFixed(2)}</span>
+          <span className="text-2xl font-light text-white">${service.cost < 0.01 ? '< $0.01' : service.cost.toFixed(2)}</span>
         </div>
         <div className="text-xs text-zinc-500 font-light">
           {service.period.start} - {service.period.end}
         </div>
       </div>
+
+      {/* Active Resources */}
+      {matchingResources && matchingResources.resources.length > 0 && (
+        <div>
+          <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Active {matchingResources.serviceName} Resources</h3>
+          <div className="space-y-2">
+            {matchingResources.resources.map((resource, idx) => (
+              <div key={idx} className="p-3 bg-white/[0.02] border border-white/5 rounded-lg">
+                <div className="text-sm text-zinc-300 font-light">{resource.name}</div>
+                {resource.createdAt && (
+                  <div className="text-[10px] text-zinc-600 mt-1">
+                    Created: {new Date(resource.createdAt).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* No Resources Message */}
+      {!matchingResources && (
+        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <p className="text-sm text-zinc-500 font-light">
+            No detailed resource data available for {service.serviceName}.
+            This could be because the service is within the free tier or Cost Explorer is still syncing (up to 24hrs).
+          </p>
+        </div>
+      )}
 
       {/* AI Recommendation */}
       <div>
@@ -572,7 +618,7 @@ function ServiceDeepDive({
       <div>
         <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">AWS CLI Command</h3>
         <div className="relative">
-          <pre className="p-4 bg-black/40 border border-white/10 rounded-lg text-xs font-mono text-zinc-400 overflow-x-auto">
+          <pre className="p-4 bg-black/40 border border-white/10 rounded-lg text-xs font-mono text-zinc-400 overflow-x-auto whitespace-pre-wrap">
             {getServiceCLI()}
           </pre>
           <button
@@ -821,6 +867,7 @@ export default function Dashboard() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTitle, setDrawerTitle] = useState('');
   const [selectedService, setSelectedService] = useState<ServiceCost | null>(null);
+  const [selectedServiceDetails, setSelectedServiceDetails] = useState<ServiceDetail[]>([]);
   const [selectedUtilization, setSelectedUtilization] = useState<UtilizationData | null>(null);
   const [selectedZombie, setSelectedZombie] = useState<ZombieResource | null>(null);
   const [selectedInstance, setSelectedInstance] = useState<EC2Instance | null>(null);
@@ -878,6 +925,7 @@ export default function Dashboard() {
   // Handle service click - open deep dive
   const handleServiceSelect = (service: ServiceCost) => {
     setSelectedService(service);
+    setSelectedServiceDetails((data?.data as any)?.serviceDetails || []);
     setDrawerTitle(`Cost Analysis: ${service.serviceName}`);
     setDrawerOpen(true);
   };
@@ -893,6 +941,7 @@ export default function Dashboard() {
   const handleCloseDrawer = () => {
     setDrawerOpen(false);
     setSelectedService(null);
+    setSelectedServiceDetails([]);
     setSelectedUtilization(null);
     setSelectedZombie(null);
     setSelectedInstance(null);
@@ -1252,7 +1301,7 @@ export default function Dashboard() {
           {!selectedInstance && selectedService && (
             <ServiceDeepDive
               service={selectedService}
-              utilization={selectedUtilization || undefined}
+              serviceResources={selectedServiceDetails}
             />
           )}
           {!selectedInstance && !selectedService && selectedUtilization && (

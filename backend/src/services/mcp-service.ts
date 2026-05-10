@@ -13,6 +13,7 @@
 
 import { costExplorerService } from './cost-explorer.js';
 import { ec2Service } from './ec2.js';
+import { resourceScannerService } from './resource-scanner.js';
 import { recommendationEngine } from '../recommendations/recommendation-engine.js';
 import { logger } from '../utils/logger.js';
 import type { OptimizationReport, EC2Instance, EBSVolume } from '../types/index.js';
@@ -170,6 +171,15 @@ export class MCPService {
       const costData = await costExplorerService.getCurrentMonthSpend();
       const topServices = await costExplorerService.getTopServices(10);
 
+      // Fetch service details
+      const serviceDetails: any[] = [];
+      for (const service of topServices.slice(0, 5)) {
+        const detail = await resourceScannerService.getServiceResources(service.serviceName);
+        if (detail.resources.length > 0) {
+          serviceDetails.push(detail);
+        }
+      }
+
       const report: OptimizationReport = {
         summary: {
           totalRecommendations: summary.totalRecommendations,
@@ -185,6 +195,7 @@ export class MCPService {
         topServices,
         zombieResources: analysis.zombieResources,
         utilizationData: analysis.utilizationData,
+        serviceDetails,
         timestamp: new Date().toISOString(),
       };
 

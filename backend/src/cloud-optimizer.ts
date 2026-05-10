@@ -12,6 +12,7 @@ import type {
 import { costExplorerService } from './services/cost-explorer.js';
 import { ec2Service } from './services/ec2.js';
 import { mcpService } from './services/mcp-service.js';
+import { resourceScannerService } from './services/resource-scanner.js';
 import { recommendationEngine } from './recommendations/recommendation-engine.js';
 import { logger, createLogger } from './utils/logger.js';
 import { handleError } from './utils/errors.js';
@@ -19,6 +20,7 @@ import type {
   OptimizationReport,
   CloudOptimizerResponse,
   HandlerEvent,
+  ServiceDetail,
 } from './types/index.js';
 
 // Helper to extract path from event
@@ -59,6 +61,15 @@ async function runOptimizationAnalysis(region?: string): Promise<OptimizationRep
 
   const topServices = await costExplorerService.getTopServices(10);
 
+  // Fetch detailed resources for each service (for Deep Dive)
+  const serviceDetails: ServiceDetail[] = [];
+  for (const service of topServices.slice(0, 5)) {
+    const detail = await resourceScannerService.getServiceResources(service.serviceName);
+    if (detail.resources.length > 0) {
+      serviceDetails.push(detail);
+    }
+  }
+
   const report: OptimizationReport = {
     summary: {
       totalRecommendations: summary.totalRecommendations,
@@ -74,6 +85,7 @@ async function runOptimizationAnalysis(region?: string): Promise<OptimizationRep
     topServices,
     zombieResources: analysis.zombieResources,
     utilizationData: analysis.utilizationData,
+    serviceDetails,
     timestamp: new Date().toISOString(),
   };
 
@@ -108,6 +120,7 @@ async function handleGetSpending(): Promise<CloudOptimizerResponse> {
         topServices: [],
         zombieResources: [],
         utilizationData: [],
+        serviceDetails: [],
         timestamp: new Date().toISOString(),
       },
       requestId: logger.getRequestId(),
