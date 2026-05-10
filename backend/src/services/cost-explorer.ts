@@ -50,7 +50,7 @@ export class CostExplorerService {
 
       if (resultsByTime.length > 0) {
         const groups = resultsByTime[0].Groups || [];
-        totalAmount = groups.reduce((sum, group) => {
+        totalAmount = groups.reduce((sum: number, group: any) => {
           const amount = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0');
           return sum + amount;
         }, 0).toFixed(2);
@@ -110,7 +110,7 @@ export class CostExplorerService {
 
       if (resultsByTime.length > 0) {
         const groups = resultsByTime[0].Groups || [];
-        totalAmount = groups.reduce((sum, group) => {
+        totalAmount = groups.reduce((sum: number, group: any) => {
           const amount = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0');
           return sum + amount;
         }, 0).toFixed(2);

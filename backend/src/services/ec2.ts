@@ -185,7 +185,7 @@ export class EC2Service {
         const response = await client.send(command);
 
         for (const volume of response.Volumes || []) {
-          const attachments: EBSVolume['attachments'] = volume.Attachments?.map((att) => ({
+          const attachments: EBSVolume['attachments'] = volume.Attachments?.map((att: any) => ({
             instanceId: att.InstanceId || null,
             device: att.Device || null,
             attachTime: att.AttachTime?.toISOString() || null,
