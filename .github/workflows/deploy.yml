@@ -18,17 +18,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install backend dependencies
-        working-directory: ./backend
-        run: npm ci
+      - name: Install Dependencies
+        run: npm install
 
-      - name: Install frontend dependencies
-        working-directory: ./frontend
-        run: npm ci
-
-      - name: Build backend
-        working-directory: ./backend
-        run: npm run build
+      - name: Build Backend
+        run: npm run build -w @nexuscloud/backend
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -38,5 +32,4 @@ jobs:
           aws-region: us-east-1
 
       - name: Deploy infrastructure
-        working-directory: ./infra
         run: npx cdk deploy --require-approval never
