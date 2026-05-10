@@ -1,0 +1,19 @@
+{
+  "name": "nexuscloud",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NexusCloud - Full-stack monorepo with AWS CDK, Next.js, and Lambda",
+  "workspaces": [
+    "infra",
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "infra:cdk": "cd infra && cdk",
+    "frontend:dev": "cd frontend && npm run dev",
+    "backend:deploy": "cd backend && npm run deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

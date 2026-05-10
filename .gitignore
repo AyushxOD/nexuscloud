@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# CDK outputs
+cdk.out/
+
+# OS files
+.DS_Store
+*/.DS_Store
+
+# Build outputs
+dist/
+.next/
+*.build/
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript cache
+*.tsbuildinfo

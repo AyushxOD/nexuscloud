@@ -1,0 +1,29 @@
+{
+  "name": "@nexuscloud/backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NexusCloud Backend - Lambda Functions with Cloud Optimizer",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+    "deploy": "npm run build && npm run package && aws lambda update-function-code --function-name NexusCloud-ApiHandler --zip-file fileb://function.zip",
+    "package": "cd dist && zip -r function.zip index.js src node_modules package.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cost-explorer": "^3.500.0",
+    "@aws-sdk/client-dynamodb": "^3.500.0",
+    "@aws-sdk/client-ec2": "^3.500.0",
+    "@aws-sdk/client-sts": "^3.500.0",
+    "@aws-sdk/lib-dynamodb": "^3.500.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.133",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

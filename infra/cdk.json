@@ -1,0 +1,9 @@
+{
+  "app": "npx ts-node src/main.ts",
+  "context": {
+    "@aws-cdk/core:newStyleStackSynthesis": true,
+    "@aws-cdk/core:validateStackWithoutAssets": true,
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/aws-codepipeline:warnAboutForcedPipeline": true
+  }
+}
