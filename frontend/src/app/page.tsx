@@ -30,7 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchOptimizationData } from '@/lib/api';
-import type { CloudOptimizerResponse, EC2Instance, Resource } from '@/lib/types';
+import type { CloudOptimizerResponse, EC2Instance, Resource, ServiceCost, ZombieResource, UtilizationData } from '@/lib/types';
 
 const fetcher = () => fetchOptimizationData().then((res) => res as Promise<CloudOptimizerResponse>);
 
@@ -369,6 +369,305 @@ function EmptyState({
   );
 }
 
+// Service Leaderboard - Top 10 Cost Drivers
+function ServiceLeaderboard({
+  services,
+  onSelectService,
+}: {
+  services: ServiceCost[];
+  onSelectService: (service: ServiceCost) => void;
+}) {
+  if (services.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-zinc-500 font-light text-sm">No service cost data available</p>
+      </div>
+    );
+  }
+
+  const maxCost = Math.max(...services.map(s => s.cost));
+
+  return (
+    <div className="space-y-2">
+      {services.map((service, index) => (
+        <motion.button
+          key={service.serviceName}
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: index * 0.05 }}
+          onClick={() => onSelectService(service)}
+          className="w-full group flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/[0.03] transition-all"
+        >
+          <span className="text-[10px] text-zinc-600 font-mono w-4">{index + 1}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-zinc-300 font-light truncate">{service.serviceName}</span>
+              <span className="text-xs text-zinc-400 font-light">${service.cost.toFixed(2)}</span>
+            </div>
+            <div className="h-1 bg-white/[0.05] rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-indigo-500/60 to-purple-500/60"
+                initial={{ width: 0 }}
+                animate={{ width: `${(service.cost / maxCost) * 100}%` }}
+                transition={{ delay: index * 0.05 + 0.1, duration: 0.5 }}
+              />
+            </div>
+          </div>
+        </motion.button>
+      ))}
+    </div>
+  );
+}
+
+// Zombie Resource Panel
+function ZombiePanel({
+  zombies,
+  onSelectZombie,
+}: {
+  zombies: ZombieResource[];
+  onSelectZombie: (zombie: ZombieResource) => void;
+}) {
+  if (zombies.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-3">
+          <CheckCircle2 className="h-5 w-5 text-emerald-500/60" />
+        </div>
+        <p className="text-sm text-zinc-500 font-light">No zombie resources detected</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {zombies.map((zombie, index) => (
+        <motion.button
+          key={zombie.resourceId}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.05 }}
+          onClick={() => onSelectZombie(zombie)}
+          className="w-full text-left p-3 rounded-lg bg-amber-500/[0.03] border border-amber-500/10 hover:bg-amber-500/[0.06] transition-all"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-500/70 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-zinc-300 line-clamp-2">{zombie.description}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] text-zinc-600 uppercase tracking-wider">{zombie.resourceType}</span>
+                <span className="text-[10px] text-zinc-700 font-mono">{zombie.resourceId.slice(0, 12)}...</span>
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className="text-sm font-light text-amber-400">${zombie.estimatedSavings.toFixed(2)}</p>
+              <p className="text-[9px] text-zinc-600">/month</p>
+            </div>
+          </div>
+        </motion.button>
+      ))}
+    </div>
+  );
+}
+
+// Deep Dive Drawer - Modal for detailed view
+function DeepDiveDrawer({
+  isOpen,
+  onClose,
+  title,
+  children,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ opacity: 0, x: 100 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 100 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-zinc-950 border-l border-white/10 z-50 overflow-y-auto"
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-light text-zinc-200">{title}</h2>
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-lg hover:bg-white/[0.05] transition-colors"
+                >
+                  <X className="h-5 w-5 text-zinc-500" />
+                </button>
+              </div>
+              {children}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Deep Dive Content for Services
+function ServiceDeepDive({
+  service,
+  utilization,
+  instanceId,
+}: {
+  service?: ServiceCost;
+  utilization?: UtilizationData;
+  instanceId?: string;
+}) {
+  if (!service) return null;
+
+  // Generate CLI command based on service type
+  const getServiceCLI = () => {
+    const serviceName = service.serviceName.toLowerCase();
+    if (serviceName.includes('ec2') || serviceName.includes('compute')) {
+      return `aws ec2 describe-instances --region us-east-1 --filters "Name=instance-state-code,Values=16" | jq '.Reservations[].Instances[] | select(.Tags.Name=="${service.serviceName}")'`;
+    }
+    if (serviceName.includes('rds')) {
+      return `aws rds describe-db-instances --region us-east-1 | jq '.DBInstances[] | select(.DBInstanceIdentifier | contains("${service.serviceName}"))'`;
+    }
+    return `# View ${service.serviceName} cost details\naws ce get-cost-and-usage --time-period Start=${service.period.start},End=${service.period.end} --granularity MONTHLY --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE`;
+  };
+
+  const getRecommendation = () => {
+    const savings = service.cost * 0.15;
+    return `Optimize ${service.serviceName} by identifying idle resources. Potential monthly savings: $${savings.toFixed(2)}`;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Service Overview */}
+      <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs text-zinc-500 uppercase tracking-wider">Current Cost</span>
+          <span className="text-2xl font-light text-white">${service.cost.toFixed(2)}</span>
+        </div>
+        <div className="text-xs text-zinc-500 font-light">
+          {service.period.start} - {service.period.end}
+        </div>
+      </div>
+
+      {/* AI Recommendation */}
+      <div>
+        <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">AI Recommendation</h3>
+        <div className="p-4 bg-indigo-500/[0.05] border border-indigo-500/20 rounded-lg">
+          <p className="text-sm text-zinc-300 font-light leading-relaxed">{getRecommendation()}</p>
+        </div>
+      </div>
+
+      {/* CLI Command */}
+      <div>
+        <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">AWS CLI Command</h3>
+        <div className="relative">
+          <pre className="p-4 bg-black/40 border border-white/10 rounded-lg text-xs font-mono text-zinc-400 overflow-x-auto">
+            {getServiceCLI()}
+          </pre>
+          <button
+            onClick={() => navigator.clipboard.writeText(getServiceCLI())}
+            className="absolute top-2 right-2 p-1.5 rounded bg-white/5 hover:bg-white/10 transition-colors"
+          >
+            <Copy className="h-3.5 w-3.5 text-zinc-500" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Deep Dive Content for Utilization (Right-Sizing)
+function UtilizationDeepDive({
+  utilization,
+  instance,
+}: {
+  utilization?: UtilizationData;
+  instance?: EC2Instance;
+}) {
+  if (!utilization) return null;
+
+  const action = utilization.avgValue < 20 ? 'downgrade' : utilization.avgValue > 80 ? 'upgrade' : 'maintain';
+  const actionColor = action === 'downgrade' ? 'text-amber-400' : action === 'upgrade' ? 'text-emerald-400' : 'text-zinc-400';
+  const actionLabel = action === 'downgrade' ? 'Downgrade' : action === 'upgrade' ? 'Upgrade' : 'Maintain';
+
+  const getCLI = () => {
+    if (!instance) return '';
+    const currentType = instance.instanceType;
+    const downgradeMap: Record<string, string> = {
+      't3.large': 't3.medium',
+      't3.medium': 't3.small',
+      't3.small': 't3.micro',
+      'm5.xlarge': 'm5.large',
+      'c5.xlarge': 'c5.large',
+    };
+    const newType = downgradeMap[currentType] || currentType;
+
+    return `# Modify instance type for right-sizing\naws ec2 modify-instance-attribute --instance-id ${instance.instanceId} --instance-type "{\"Value\": \"${newType}\"}"`;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Utilization Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">7-Day Average</div>
+          <div className="text-2xl font-light text-white">{utilization.avgValue}%</div>
+        </div>
+        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+          <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">7-Day Max</div>
+          <div className="text-2xl font-light text-zinc-400">{utilization.maxValue}%</div>
+        </div>
+      </div>
+
+      {/* Action */}
+      <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+        <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Recommended Action</div>
+        <div className={`text-lg font-light ${actionColor}`}>{actionLabel}</div>
+        {action === 'downgrade' && (
+          <p className="text-xs text-zinc-500 mt-2 font-light">
+            CPU utilization has been below 20% for 7 days. Consider downsizing to reduce costs.
+          </p>
+        )}
+        {action === 'upgrade' && (
+          <p className="text-xs text-zinc-500 mt-2 font-light">
+            CPU utilization has exceeded 80%. Consider upsizing for better performance.
+          </p>
+        )}
+      </div>
+
+      {/* CLI */}
+      <div>
+        <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">AWS CLI Command</h3>
+        <div className="relative">
+          <pre className="p-4 bg-black/40 border border-white/10 rounded-lg text-xs font-mono text-zinc-400 overflow-x-auto">
+            {getCLI()}
+          </pre>
+          <button
+            onClick={() => navigator.clipboard.writeText(getCLI())}
+            className="absolute top-2 right-2 p-1.5 rounded bg-white/5 hover:bg-white/10 transition-colors"
+          >
+            <Copy className="h-3.5 w-3.5 text-zinc-500" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Import Copy icon
+import { Copy } from 'lucide-react';
+
 // ============================================
 // MAIN DASHBOARD
 // ============================================
@@ -384,6 +683,14 @@ export default function Dashboard() {
   const [highlightedResource, setHighlightedResource] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({ states: [], types: [], regions: [] });
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+
+  // Deep Dive Drawer State
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTitle, setDrawerTitle] = useState('');
+  const [selectedService, setSelectedService] = useState<ServiceCost | null>(null);
+  const [selectedUtilization, setSelectedUtilization] = useState<UtilizationData | null>(null);
+  const [selectedZombie, setSelectedZombie] = useState<ZombieResource | null>(null);
+  const [selectedInstance, setSelectedInstance] = useState<EC2Instance | null>(null);
 
   // Derived filtered data
   const filteredInstances = useMemo(() => {
@@ -425,6 +732,37 @@ export default function Dashboard() {
   // Handle instance click - filter recommendations
   const handleInstanceClick = (instance: EC2Instance) => {
     setHighlightedResource(instance.instanceId);
+    // Also open deep dive for utilization
+    const util = data?.data?.utilizationData?.find(u => u.resourceId === instance.instanceId);
+    if (util) {
+      setSelectedInstance(instance);
+      setSelectedUtilization(util);
+      setDrawerTitle(`Right-Sizing: ${instance.instanceId}`);
+      setDrawerOpen(true);
+    }
+  };
+
+  // Handle service click - open deep dive
+  const handleServiceSelect = (service: ServiceCost) => {
+    setSelectedService(service);
+    setDrawerTitle(`Cost Analysis: ${service.serviceName}`);
+    setDrawerOpen(true);
+  };
+
+  // Handle zombie resource click - open deep dive
+  const handleZombieSelect = (zombie: ZombieResource) => {
+    setSelectedZombie(zombie);
+    setDrawerTitle(`Zombie Resource: ${zombie.resourceType}`);
+    setDrawerOpen(true);
+  };
+
+  // Close drawer
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
+    setSelectedService(null);
+    setSelectedUtilization(null);
+    setSelectedZombie(null);
+    setSelectedInstance(null);
   };
 
   if (isLoading) {
@@ -597,6 +935,46 @@ export default function Dashboard() {
           </AnimatePresence>
         </section>
 
+        {/* ENTERPRISE: Top Services & Zombie Hunter */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Service Leaderboard */}
+          <div className="bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-white/[0.05]">
+              <div className="flex items-center gap-2.5">
+                <DollarSign className="h-4 w-4 text-indigo-400/70" />
+                <span className="text-sm font-light text-zinc-300">Top 10 Cost Drivers</span>
+              </div>
+            </div>
+            <div className="p-4 max-h-[320px] overflow-y-auto">
+              <ServiceLeaderboard
+                services={(report as any).topServices || []}
+                onSelectService={handleServiceSelect}
+              />
+            </div>
+          </div>
+
+          {/* Zombie Resources Panel */}
+          <div className="bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-white/[0.05]">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-400/70" />
+                <span className="text-sm font-light text-zinc-300">Zombie Hunter</span>
+                {((report as any).zombieResources?.length || 0) > 0 && (
+                  <GlowBadge variant="warning" glowColor="warning">
+                    {(report as any).zombieResources.length}
+                  </GlowBadge>
+                )}
+              </div>
+            </div>
+            <div className="p-4 max-h-[320px] overflow-y-auto">
+              <ZombiePanel
+                zombies={(report as any).zombieResources || []}
+                onSelectZombie={handleZombieSelect}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* SECONDARY GRID - Contextual panels - premium card style */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* RECOMMENDATIONS PANEL */}
@@ -725,6 +1103,56 @@ export default function Dashboard() {
             Data refreshes every 30 seconds · Powered by Claude AI
           </p>
         </footer>
+
+        {/* Deep Dive Drawer */}
+        <DeepDiveDrawer
+          isOpen={drawerOpen}
+          onClose={handleCloseDrawer}
+          title={drawerTitle}
+        >
+          {selectedService && (
+            <ServiceDeepDive
+              service={selectedService}
+              utilization={selectedUtilization || undefined}
+              instanceId={selectedInstance?.instanceId}
+            />
+          )}
+          {selectedUtilization && !selectedService && (
+            <UtilizationDeepDive
+              utilization={selectedUtilization}
+              instance={selectedInstance || undefined}
+            />
+          )}
+          {selectedZombie && !selectedService && !selectedUtilization && (
+            <div className="space-y-6">
+              <div className="p-4 bg-amber-500/[0.05] border border-amber-500/20 rounded-lg">
+                <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Resource Type</div>
+                <div className="text-sm text-zinc-300 font-light capitalize">{selectedZombie.resourceType}</div>
+              </div>
+              <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+                <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Resource ID</div>
+                <div className="text-xs font-mono text-zinc-400">{selectedZombie.resourceId}</div>
+              </div>
+              <div>
+                <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Recommended Action</h3>
+                <div className="p-4 bg-amber-500/[0.05] border border-amber-500/20 rounded-lg">
+                  <p className="text-sm text-zinc-300 font-light">{selectedZombie.description}</p>
+                  <p className="text-xs text-amber-400 mt-3">Potential savings: ${selectedZombie.estimatedSavings.toFixed(2)}/month</p>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-xs text-zinc-500 uppercase tracking-wider mb-3">AWS CLI Command</h3>
+                <div className="relative">
+                  <pre className="p-4 bg-black/40 border border-white/10 rounded-lg text-xs font-mono text-zinc-400 overflow-x-auto">
+                    {selectedZombie.resourceType === 'eip'
+                      ? `# Release Elastic IP\naws ec2 release-address --allocation-id ${selectedZombie.resourceId}`
+                      : `# Delete Snapshot\naws ec2 delete-snapshot --snapshot-id ${selectedZombie.resourceId}`}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          )}
+        </DeepDiveDrawer>
       </main>
     </div>
   );

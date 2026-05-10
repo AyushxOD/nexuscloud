@@ -2,12 +2,14 @@ import {
   EC2Client,
   DescribeInstancesCommand,
   DescribeVolumesCommand,
+  DescribeAddressesCommand,
+  DescribeSnapshotsCommand,
   DescribeInstancesCommandInput,
   DescribeVolumesCommandInput,
 } from '@aws-sdk/client-ec2';
 import { logger } from '../utils/logger.js';
 import { AWSServiceError } from '../utils/errors.js';
-import type { EC2Instance, EBSVolume } from '../types/index.js';
+import type { EC2Instance, EBSVolume, ZombieResource } from '../types/index.js';
 
 export class EC2Service {
   private client: EC2Client;
@@ -269,6 +271,89 @@ export class EC2Service {
 
     const monthlyRate = costPerGB[volumeType.toLowerCase()] || 0.10;
     return size * monthlyRate;
+  }
+
+  async getUnattachedEIPs(region?: string): Promise<ZombieResource[]> {
+    const targetRegion = this.getRegion(region);
+    const client = this.getClientForRegion(targetRegion);
+
+    try {
+      logger.info('Fetching unattached Elastic IPs', { region: targetRegion } as Record<string, unknown>);
+
+      const command = new DescribeAddressesCommand({
+        Filters: [{ Name: 'association', Values: ['false'] }],
+      });
+      const response = await client.send(command);
+
+      const zombies: ZombieResource[] = [];
+
+      for (const addr of response.Addresses || []) {
+        if (!addr.AllocationId) continue;
+
+        // EIPs cost ~$0.005/hour when not attached
+        const monthlyCost = 0.005 * 24 * 30;
+
+        zombies.push({
+          resourceId: addr.AllocationId,
+          resourceType: 'eip',
+          description: `Unattached Elastic IP (${addr.PublicIp || 'no public IP'}) - $${monthlyCost.toFixed(2)}/month waste`,
+          estimatedSavings: Math.round(monthlyCost * 100) / 100,
+          region: targetRegion,
+          createdAt: addr.AllocationId ? new Date().toISOString() : new Date().toISOString(),
+        });
+      }
+
+      logger.info('Unattached EIPs fetched', { count: zombies.length } as Record<string, unknown>);
+      return zombies;
+    } catch (error) {
+      logger.error('Failed to fetch EIPs', error);
+      return [];
+    }
+  }
+
+  async getOrphanedSnapshots(region?: string): Promise<ZombieResource[]> {
+    const targetRegion = this.getRegion(region);
+    const client = this.getClientForRegion(targetRegion);
+
+    try {
+      logger.info('Fetching orphaned snapshots', { region: targetRegion } as Record<string, unknown>);
+
+      const command = new DescribeSnapshotsCommand({
+        Filters: [{ Name: 'owner', Values: ['self'] }],
+      });
+      const response = await client.send(command);
+
+      const zombies: ZombieResource[] = [];
+      const activeVolumeIds = new Set((await this.getVolumes(targetRegion)).map(v => v.volumeId));
+
+      for (const snapshot of response.Snapshots || []) {
+        if (!snapshot.SnapshotId) continue;
+
+        // Check if snapshot is attached to any volume
+        const isOrphaned = !snapshot.VolumeId || !activeVolumeIds.has(snapshot.VolumeId);
+
+        if (isOrphaned) {
+          // Snapshots cost ~$0.05/GB/month
+          const size = snapshot.VolumeSize || 0;
+          const monthlyCost = size * 0.05;
+
+          zombies.push({
+            resourceId: snapshot.SnapshotId,
+            resourceType: 'snapshot',
+            description: `Orphaned snapshot (${size} GB) - No linked volume`,
+            estimatedSavings: Math.round(monthlyCost * 100) / 100,
+            region: targetRegion,
+            createdAt: snapshot.StartTime?.toISOString() || new Date().toISOString(),
+          });
+        }
+      }
+
+      logger.info('Orphaned snapshots fetched', { count: zombies.length } as Record<string, unknown>);
+      return zombies;
+    } catch (error) {
+      logger.error('Failed to fetch snapshots', error);
+      return [];
+    }
   }
 }
 

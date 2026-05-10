@@ -168,6 +168,7 @@ export class MCPService {
       const activeInstances = await ec2Service.getActiveInstances(region);
 
       const costData = await costExplorerService.getCurrentMonthSpend();
+      const topServices = await costExplorerService.getTopServices(10);
 
       const report: OptimizationReport = {
         summary: {
@@ -181,6 +182,9 @@ export class MCPService {
         currentSpend: costData,
         recommendations: [...analysis.stoppedInstances, ...analysis.unattachedVolumes],
         ec2Instances: activeInstances,
+        topServices,
+        zombieResources: analysis.zombieResources,
+        utilizationData: analysis.utilizationData,
         timestamp: new Date().toISOString(),
       };
 

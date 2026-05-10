@@ -57,6 +57,9 @@ export interface OptimizationReport {
   currentSpend: CostData | null;
   recommendations: Resource[];
   ec2Instances: EC2Instance[];
+  topServices: ServiceCost[];
+  zombieResources: ZombieResource[];
+  utilizationData: UtilizationData[];
   timestamp: string;
 }
 
@@ -65,4 +68,48 @@ export interface CloudOptimizerResponse {
   data?: OptimizationReport;
   error?: string;
   requestId?: string;
+}
+
+export interface ServiceCost {
+  serviceName: string;
+  cost: number;
+  currency: string;
+  period: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface UtilizationData {
+  resourceId: string;
+  resourceType: 'ec2' | 'rds';
+  metric: 'cpu' | 'memory' | 'iops' | 'throughput';
+  avgValue: number;
+  maxValue: number;
+  period: string;
+}
+
+export interface ZombieResource {
+  resourceId: string;
+  resourceType: 'eip' | 'snapshot' | 'elb';
+  description: string;
+  estimatedSavings: number;
+  region: string;
+  createdAt: string;
+}
+
+export interface DeepDiveRecommendation {
+  resourceId: string;
+  resourceType: string;
+  recommendation: string;
+  currentUtilization?: UtilizationData;
+  action: 'upgrade' | 'downgrade' | 'terminate' | 'resize';
+  cliCommand: string;
+  estimatedSavings?: number;
+}
+
+export interface ExtendedOptimizationReport extends OptimizationReport {
+  topServices: ServiceCost[];
+  zombieResources: ZombieResource[];
+  utilizationData: UtilizationData[];
 }

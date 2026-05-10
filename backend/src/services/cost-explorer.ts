@@ -5,7 +5,7 @@ import {
 } from '@aws-sdk/client-cost-explorer';
 import { logger } from '../utils/logger.js';
 import { AWSServiceError } from '../utils/errors.js';
-import type { CostData } from '../types/index.js';
+import type { CostData, ServiceCost } from '../types/index.js';
 
 export class CostExplorerService {
   private client: CostExplorerClient;
@@ -127,6 +127,71 @@ export class CostExplorerService {
     } catch (error) {
       throw new AWSServiceError(
         `Failed to fetch costs for service: ${service}`,
+        'CostExplorer',
+        'GetCostAndUsage',
+        error,
+        true
+      );
+    }
+  }
+
+  async getTopServices(limit: number = 10): Promise<ServiceCost[]> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const startDate = startOfMonth.toISOString().split('T')[0];
+    const endDate = now.toISOString().split('T')[0];
+
+    const params: GetCostAndUsageCommandInput = {
+      TimePeriod: {
+        Start: startDate,
+        End: endDate,
+      },
+      Granularity: 'MONTHLY',
+      Metrics: ['UnblendedCost'],
+      GroupBy: [
+        {
+          Type: 'DIMENSION',
+          Key: 'SERVICE',
+        },
+      ],
+    };
+
+    try {
+      logger.info('Fetching top services by cost', { limit } as Record<string, unknown>);
+
+      const command = new GetCostAndUsageCommand(params);
+      const response = await this.client.send(command);
+
+      const resultsByTime = response.ResultsByTime || [];
+      const services: ServiceCost[] = [];
+
+      if (resultsByTime.length > 0) {
+        const groups = resultsByTime[0].Groups || [];
+
+        for (const group of groups) {
+          const serviceName = group.Keys?.[0] || 'Unknown';
+          const amount = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0');
+
+          if (amount > 0) {
+            services.push({
+              serviceName,
+              cost: amount,
+              currency: 'USD',
+              period: { start: startDate, end: endDate },
+            });
+          }
+        }
+
+        services.sort((a, b) => b.cost - a.cost);
+      }
+
+      logger.info('Top services fetched', { count: services.length } as Record<string, unknown>);
+
+      return services.slice(0, limit);
+    } catch (error) {
+      throw new AWSServiceError(
+        'Failed to fetch top services',
         'CostExplorer',
         'GetCostAndUsage',
         error,

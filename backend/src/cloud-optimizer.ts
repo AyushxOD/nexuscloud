@@ -57,6 +57,8 @@ async function runOptimizationAnalysis(region?: string): Promise<OptimizationRep
 
   const summary = recommendationEngine.generateSummary(analysis);
 
+  const topServices = await costExplorerService.getTopServices(10);
+
   const report: OptimizationReport = {
     summary: {
       totalRecommendations: summary.totalRecommendations,
@@ -69,6 +71,9 @@ async function runOptimizationAnalysis(region?: string): Promise<OptimizationRep
     currentSpend: costData,
     recommendations: [...analysis.stoppedInstances, ...analysis.unattachedVolumes],
     ec2Instances: activeInstances,
+    topServices,
+    zombieResources: analysis.zombieResources,
+    utilizationData: analysis.utilizationData,
     timestamp: new Date().toISOString(),
   };
 
@@ -100,6 +105,9 @@ async function handleGetSpending(): Promise<CloudOptimizerResponse> {
         currentSpend: costData,
         recommendations: [],
         ec2Instances: [],
+        topServices: [],
+        zombieResources: [],
+        utilizationData: [],
         timestamp: new Date().toISOString(),
       },
       requestId: logger.getRequestId(),

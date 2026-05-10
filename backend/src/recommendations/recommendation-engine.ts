@@ -1,6 +1,7 @@
 import { ec2Service } from '../services/ec2.js';
+import { cloudWatchService } from '../services/cloudwatch.js';
 import { logger } from '../utils/logger.js';
-import type { EC2Instance, EBSVolume, Resource } from '../types/index.js';
+import type { EC2Instance, EBSVolume, Resource, ZombieResource, UtilizationData } from '../types/index.js';
 
 interface InstancePricing {
   hourlyCost: number;
@@ -14,6 +15,8 @@ interface VolumePricing {
 interface OptimizationResult {
   stoppedInstances: Resource[];
   unattachedVolumes: Resource[];
+  zombieResources: ZombieResource[];
+  utilizationData: UtilizationData[];
   totalSavings: number;
 }
 
@@ -27,6 +30,8 @@ class RecommendationEngine {
     const result: OptimizationResult = {
       stoppedInstances: [],
       unattachedVolumes: [],
+      zombieResources: [],
+      utilizationData: [],
       totalSavings: 0,
     };
 
@@ -52,6 +57,29 @@ class RecommendationEngine {
         if (recommendation) {
           result.unattachedVolumes.push(recommendation);
           result.totalSavings += recommendation.estimatedSavings;
+        }
+      }
+
+      // Zombie Hunter: Detect unattached EIPs
+      const unattachedEIPs = await ec2Service.getUnattachedEIPs(region);
+      logger.info('Zombie hunter: unattached EIPs', { count: unattachedEIPs.length } as Record<string, unknown>);
+      result.zombieResources.push(...unattachedEIPs);
+
+      // Zombie Hunter: Detect orphaned snapshots
+      const orphanedSnapshots = await ec2Service.getOrphanedSnapshots(region);
+      logger.info('Zombie hunter: orphaned snapshots', { count: orphanedSnapshots.length } as Record<string, unknown>);
+      result.zombieResources.push(...orphanedSnapshots);
+
+      // Get utilization data for running instances (right-sizing recommendations)
+      const runningInstances = await ec2Service.getActiveInstances(region);
+      const runningOnDemand = runningInstances.filter(i => i.state === 'running');
+      logger.info('Fetching utilization data for right-sizing', { count: runningOnDemand.length } as Record<string, unknown>);
+
+      for (const instance of runningOnDemand) {
+        const utilization = await cloudWatchService.getEC2Utilization(instance.instanceId, region);
+        if (utilization && utilization.avgValue < 20) {
+          result.utilizationData.push(utilization);
+          result.totalSavings += this.estimateDowngradeSavings(instance.instanceType, utilization.avgValue);
         }
       }
 
@@ -163,6 +191,28 @@ class RecommendationEngine {
     return pricing;
   }
 
+  private estimateDowngradeSavings(instanceType: string, avgUtilization: number): number {
+    // Estimate savings by downgrading to next smaller instance size
+    const downgradeMap: Record<string, string> = {
+      't3.large': 't3.medium',
+      't3.medium': 't3.small',
+      't3.small': 't3.micro',
+      't3a.large': 't3a.medium',
+      't3a.medium': 't3a.small',
+      'm5.xlarge': 'm5.large',
+      'c5.xlarge': 'c5.large',
+    };
+
+    const smallerType = downgradeMap[instanceType];
+    if (!smallerType) return 0;
+
+    const currentCost = ec2Service.getInstanceHourlyCost(instanceType);
+    const smallerCost = ec2Service.getInstanceHourlyCost(smallerType);
+    const savings = (currentCost - smallerCost) * 24 * 30;
+
+    return Math.round(savings * 100) / 100;
+  }
+
   generateSummary(result: OptimizationResult): {
     totalRecommendations: number;
     estimatedMonthlySavings: number;
@@ -177,10 +227,14 @@ class RecommendationEngine {
         count: result.unattachedVolumes.length,
         savings: result.unattachedVolumes.reduce((sum, r) => sum + r.estimatedSavings, 0),
       },
+      'zombie-resource': {
+        count: result.zombieResources.length,
+        savings: result.zombieResources.reduce((sum, r) => sum + r.estimatedSavings, 0),
+      },
     };
 
     return {
-      totalRecommendations: result.stoppedInstances.length + result.unattachedVolumes.length,
+      totalRecommendations: result.stoppedInstances.length + result.unattachedVolumes.length + result.zombieResources.length,
       estimatedMonthlySavings: Math.round(result.totalSavings * 100) / 100,
       byType,
     };

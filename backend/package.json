@@ -12,6 +12,7 @@
     "package": "cd dist && zip -r function.zip index.js src node_modules package.json"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.1045.0",
     "@aws-sdk/client-cost-explorer": "^3.1045.0",
     "@aws-sdk/client-dynamodb": "^3.1045.0",
     "@aws-sdk/client-ec2": "^3.1045.0",
